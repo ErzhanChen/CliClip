@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="avatar.svg" width="160" height="160" alt="CliClip Logo" />
+</p>
+
 <h1 align="center">CliClip</h1>
 
 <p align="center">
@@ -119,6 +123,14 @@ launchctl unload ~/Library/LaunchAgents/com.cliclip.daemon.plist
 rm ~/Library/LaunchAgents/com.cliclip.daemon.plist
 rm -rf ~/.cliclip
 ```
+
+## Logo & Design
+
+The CliClip logo represents the seamless fusion of terminal efficiency and visual workflows:
+
+- **Terminal Soul**: The deep dark background (`#1E1E1E`) and prompt symbols (`>` and `_`) anchor the tool in the developer's native environment.
+- **The Clip Bridge**: The rounded `>` icon mimics a paperclip, symbolizing the transformation bridge between "Image" and "Path."
+- **Path of Connection**: The dashed line at the bottom hints at the underlying file paths that make this integration possible.
 
 ## License
 
