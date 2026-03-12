@@ -53,7 +53,7 @@ def build_image_path():
 
 
 def append_saved_image_path(image_path):
-    """Appends a newly captured image path to the current batch."""
+    """Appends a newly captured image path to the rolling history."""
     paths_to_remove = []
     with saved_image_paths_lock:
         saved_image_paths.append(image_path)
@@ -66,9 +66,14 @@ def append_saved_image_path(image_path):
 
 
 def get_latest_saved_image_path():
-    """Returns the newest saved image path, if present."""
+    """Returns the newest existing saved image path, pruning stale entries."""
     with saved_image_paths_lock:
-        return saved_image_paths[-1] if saved_image_paths else None
+        while saved_image_paths:
+            latest_path = saved_image_paths[-1]
+            if os.path.exists(latest_path):
+                return latest_path
+            saved_image_paths.pop()
+    return None
 
 
 def remove_file_if_exists(path):
@@ -83,7 +88,7 @@ def remove_file_if_exists(path):
 
 
 def clear_saved_images():
-    """Clears the current image batch and deletes its temp files."""
+    """Clears the saved image history and deletes its temp files."""
     with saved_image_paths_lock:
         paths_to_remove = list(saved_image_paths)
         saved_image_paths.clear()
@@ -228,7 +233,6 @@ def main():
                     if save_image_binary():
                         current_mode = "IMAGE"
                 else:
-                    clear_saved_images()
                     if current_mode != "TEXT":
                         current_mode = "TEXT"
 

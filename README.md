@@ -55,7 +55,8 @@ Notes:
 
 - CliClip keeps up to `20` temp images at a time.
 - Older temp files are deleted first when the limit is exceeded.
-- Temp files are cleared when you copy non-image content or when the daemon exits.
+- Copying non-image content will not invalidate previously pasted image paths.
+- Temp files are cleared when the daemon exits.
 
 ### Uninstallation
 
@@ -108,7 +109,8 @@ curl -fsSL https://raw.githubusercontent.com/ErzhanChen/CliClip/main/scripts/ins
 
 - CliClip 最多会保留 `20` 张临时图片。
 - 超过上限后，会优先删除最旧的临时文件。
-- 当你复制非图片内容，或守护进程退出时，临时文件会被清理。
+- 复制非图片内容时，之前已经粘贴出去的图片路径仍然可用。
+- 守护进程退出时，会清理这些临时文件。
 
 ### 卸载
 
