@@ -5,6 +5,9 @@
 ## ✨ Features
 
 - **Context-Aware**: Automatically converts images to paths in **iTerm2** and **Terminal**.
+- **Multi-Image Safe**: Each screenshot gets its own temp file, so previously pasted image paths in the CLI won't be overwritten by later screenshots.
+- **Hidden Temp Directory**: Temp files live in a short hidden directory like `@/tmp/.cc/cc_h8x2w9k3zl.png`.
+- **Short Timestamp Names**: Temp files use compact timestamp names to keep pasted paths concise.
 - **Auto-Restore**: Switches back to the original image data when you move to GUI apps (WeChat, Chrome, Slack, etc.).
 - **Smart Filtering**: Ignores file copies and rich-text/HTML copies to prevent workflow interference.
 - **Zero Dependencies**: Pure Python + Native macOS tools (`osascript`, `sips`, `perl`).
@@ -25,10 +28,14 @@
 
 ## 📖 Usage
 
-1. **Take a screenshot** (e.g., via WeChat or System shortcut).
+1. **Take one or more screenshots** (e.g., via WeChat or System shortcut).
 2. **Switch to iTerm2/Terminal**.
-3. **Paste (Cmd+V)**: You will see something like `@/tmp/cliclip_temp_img.png`.
-4. **Switch to WeChat**: Paste (Cmd+V) will still paste the original image.
+3. **Paste (Cmd+V)**: Each time you paste, you will get only the latest image path, for example `@/tmp/.cc/cc_h8x2w9k3zl.png`.
+4. **Switch to WeChat**: Paste (Cmd+V) will still paste the most recently copied original image.
+
+Notes:
+- CliClip keeps up to 20 temp images at a time. If you keep copying new screenshots beyond that, the oldest temp images are deleted first.
+- Temp images are also cleared when you copy non-image content or when the daemon exits/restarts.
 
 ## 🗑 Uninstallation
 

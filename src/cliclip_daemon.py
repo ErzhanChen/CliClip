@@ -1,35 +1,109 @@
-import subprocess
-import time
 import os
 import signal
+import subprocess
 import sys
 import threading
-import shutil
+import time
 
 # --- Configuration ---
-TEMP_IMAGE_PATH = "/tmp/cliclip_temp_img.png"
-CLIP_MARKER = f"@{TEMP_IMAGE_PATH}"
+TEMP_IMAGE_DIR = "/tmp/.cc"
+TEMP_IMAGE_PREFIX = "cc"
 MAX_DIMENSION = 1280
-# Added "iTerm" for compatibility with different versions/settings
+MAX_SAVED_IMAGES = 20
 TERMINAL_APPS = ["iTerm2", "iTerm", "Terminal"]
 POLL_INTERVAL = 0.2
 
-latest_image_token = 0
-latest_image_token_lock = threading.Lock()
+saved_image_paths = []
+saved_image_paths_lock = threading.Lock()
 
 
-def next_image_token():
-    """Returns a monotonically increasing token for saved clipboard images."""
-    global latest_image_token
-    with latest_image_token_lock:
-        latest_image_token += 1
-        return latest_image_token
+def encode_base36(num):
+    """Encodes a positive integer using a short base36 string."""
+    alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
+    if num <= 0:
+        return "0"
+
+    chars = []
+    while num:
+        num, remainder = divmod(num, 36)
+        chars.append(alphabet[remainder])
+    return "".join(reversed(chars))
 
 
-def is_latest_image_token(token):
-    """Checks whether a background task still targets the newest saved image."""
-    with latest_image_token_lock:
-        return token == latest_image_token
+def ensure_temp_dir():
+    """Creates the hidden temp directory when needed."""
+    try:
+        os.makedirs(TEMP_IMAGE_DIR, exist_ok=True)
+        return True
+    except:
+        return False
+
+
+def build_image_path():
+    """Builds a timestamp-based path for a saved clipboard image."""
+    if not ensure_temp_dir():
+        return None
+
+    while True:
+        timestamp = encode_base36(time.time_ns() // 1_000)
+        image_path = os.path.join(TEMP_IMAGE_DIR, f"{TEMP_IMAGE_PREFIX}_{timestamp}.png")
+        if not os.path.exists(image_path):
+            return image_path
+        time.sleep(0.001)
+
+
+def append_saved_image_path(image_path):
+    """Appends a newly captured image path to the current batch."""
+    paths_to_remove = []
+    with saved_image_paths_lock:
+        saved_image_paths.append(image_path)
+        while len(saved_image_paths) > MAX_SAVED_IMAGES:
+            paths_to_remove.append(saved_image_paths.pop(0))
+
+    for old_path in paths_to_remove:
+        remove_file_if_exists(old_path)
+        remove_file_if_exists(f"{old_path}.resize")
+
+
+def get_latest_saved_image_path():
+    """Returns the newest saved image path, if present."""
+    with saved_image_paths_lock:
+        return saved_image_paths[-1] if saved_image_paths else None
+
+
+def remove_file_if_exists(path):
+    """Best-effort removal for temporary files."""
+    if not path:
+        return
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except:
+        pass
+
+
+def clear_saved_images():
+    """Clears the current image batch and deletes its temp files."""
+    with saved_image_paths_lock:
+        paths_to_remove = list(saved_image_paths)
+        saved_image_paths.clear()
+
+    for image_path in paths_to_remove:
+        remove_file_if_exists(image_path)
+        remove_file_if_exists(f"{image_path}.resize")
+
+    # Remove legacy single-image files if they exist from older versions.
+    remove_file_if_exists(os.path.join(TEMP_IMAGE_DIR, f"{TEMP_IMAGE_PREFIX}.png"))
+    remove_file_if_exists(os.path.join(TEMP_IMAGE_DIR, "cliclip_temp_img.png"))
+    remove_file_if_exists(os.path.join("/tmp", f"{TEMP_IMAGE_PREFIX}.png"))
+    remove_file_if_exists(os.path.join("/tmp", "cliclip_temp_img.png"))
+
+    try:
+        if os.path.isdir(TEMP_IMAGE_DIR) and not os.listdir(TEMP_IMAGE_DIR):
+            os.rmdir(TEMP_IMAGE_DIR)
+    except:
+        pass
+
 
 def get_frontmost_app():
     """Returns the name of the application currently in focus."""
@@ -37,59 +111,63 @@ def get_frontmost_app():
     try:
         res = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
         return res.stdout.strip()
-    except: return ""
+    except:
+        return ""
+
 
 def get_clipboard_info():
     """Returns basic clipboard metadata (types of data present)."""
     try:
         res = subprocess.run(['osascript', '-e', 'get (clipboard info)'], capture_output=True, text=True)
         return res.stdout
-    except: return ""
+    except:
+        return ""
+
 
 def is_pure_image(info):
     """Checks if the clipboard contains image data but not file operations."""
     has_image = "PNG" in info or "picture" in info
     is_file_op = "furl" in info or "filenames" in info
-    # We relaxed the text check to ensure screenshots with minor metadata are captured
     return has_image and not is_file_op
 
 
-def resize_image_async(image_token):
-    """Resizes the saved image in the background so path availability is not blocked."""
-    resized_path = f"{TEMP_IMAGE_PATH}.{image_token}.resize"
+def resize_image_async(image_path):
+    """Resizes a saved image in the background so path availability is not blocked."""
+    resized_path = f"{image_path}.resize"
     try:
-        shutil.copyfile(TEMP_IMAGE_PATH, resized_path)
+        subprocess.run(
+            ['cp', image_path, resized_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
         subprocess.run(
             ['sips', '-Z', str(MAX_DIMENSION), resized_path],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
         )
-        if not is_latest_image_token(image_token):
-            return
         if os.path.exists(resized_path) and os.path.getsize(resized_path) > 0:
-            os.replace(resized_path, TEMP_IMAGE_PATH)
+            os.replace(resized_path, image_path)
             resized_path = None
     except:
         pass
     finally:
-        if resized_path and os.path.exists(resized_path):
-            try:
-                os.remove(resized_path)
-            except:
-                pass
+        remove_file_if_exists(resized_path)
 
 
 def save_image_binary():
-    """Extracts clipboard image data to disk and starts background optimization."""
-    cmd = f"osascript -e 'get the clipboard as «class PNGf»' | perl -ne 'print pack(\"H*\", substr($_, 11, -1))' > {TEMP_IMAGE_PATH}"
+    """Extracts clipboard image data to a unique file and starts background optimization."""
+    image_path = build_image_path()
+    if not image_path:
+        return False
+    cmd = f"osascript -e 'get the clipboard as «class PNGf»' | perl -ne 'print pack(\"H*\", substr($_, 11, -1))' > {image_path}"
     try:
-        if os.path.exists(TEMP_IMAGE_PATH):
-            os.remove(TEMP_IMAGE_PATH)
+        remove_file_if_exists(image_path)
         subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-        if os.path.exists(TEMP_IMAGE_PATH) and os.path.getsize(TEMP_IMAGE_PATH) > 0:
-            image_token = next_image_token()
-            threading.Thread(target=resize_image_async, args=(image_token,), daemon=True).start()
+        if os.path.exists(image_path) and os.path.getsize(image_path) > 0:
+            append_saved_image_path(image_path)
+            threading.Thread(target=resize_image_async, args=(image_path,), daemon=True).start()
             return True
     except:
         pass
@@ -97,31 +175,40 @@ def save_image_binary():
 
 
 def set_path_clipboard():
-    """Copies the image path marker to the clipboard for terminal pasting."""
+    """Copies the newest image marker to the clipboard for terminal pasting."""
+    latest_image_path = get_latest_saved_image_path()
+    if not latest_image_path or not os.path.exists(latest_image_path):
+        return False
     try:
-        subprocess.run(['pbcopy'], input=CLIP_MARKER, text=True, stderr=subprocess.DEVNULL, check=False)
+        subprocess.run(['pbcopy'], input=f"@{latest_image_path}", text=True, stderr=subprocess.DEVNULL, check=False)
         return True
     except:
         return False
 
+
 def restore_image_to_clipboard():
-    """Restores the previously saved image data back to the system clipboard."""
-    script = f'set the clipboard to (read (POSIX file "{TEMP_IMAGE_PATH}") as «class PNGf»)'
+    """Restores the newest saved image back to the system clipboard."""
+    latest_image_path = get_latest_saved_image_path()
+    if not latest_image_path or not os.path.exists(latest_image_path):
+        return False
+
+    script = f'set the clipboard to (read (POSIX file "{latest_image_path}") as «class PNGf»)'
     try:
         subprocess.run(['osascript', '-e', script], stderr=subprocess.DEVNULL, check=False)
         return True
     except:
         return False
 
+
 def cleanup(sig, frame):
     """Cleanup temporary files on exit."""
-    if os.path.exists(TEMP_IMAGE_PATH):
-        try: os.remove(TEMP_IMAGE_PATH)
-        except: pass
+    clear_saved_images()
     sys.exit(0)
+
 
 signal.signal(signal.SIGINT, cleanup)
 signal.signal(signal.SIGTERM, cleanup)
+
 
 def main():
     """Main loop for context-aware clipboard management."""
@@ -140,16 +227,18 @@ def main():
                 if is_pure_image(curr_info):
                     if save_image_binary():
                         current_mode = "IMAGE"
-                elif current_mode != "TEXT":
-                    current_mode = "TEXT"
+                else:
+                    clear_saved_images()
+                    if current_mode != "TEXT":
+                        current_mode = "TEXT"
 
             if curr_app in TERMINAL_APPS:
-                if current_mode == "IMAGE" and os.path.exists(TEMP_IMAGE_PATH) and (app_changed or clipboard_changed):
+                if current_mode == "IMAGE" and (app_changed or clipboard_changed):
                     if set_path_clipboard():
                         current_mode = "PATH"
                         time.sleep(0.05)
                         curr_info = get_clipboard_info()
-            elif app_changed and current_mode == "PATH" and os.path.exists(TEMP_IMAGE_PATH):
+            elif app_changed and current_mode == "PATH":
                 if restore_image_to_clipboard():
                     current_mode = "IMAGE"
                     time.sleep(0.05)
@@ -160,6 +249,7 @@ def main():
             time.sleep(POLL_INTERVAL)
         except:
             time.sleep(2)
+
 
 if __name__ == "__main__":
     main()
