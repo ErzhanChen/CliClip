@@ -1,4 +1,9 @@
-# CliClip
+<h1 align="center">CliClip</h1>
+
+<p align="center">
+  <strong>Your clipboard bridge for terminal AI workflows.</strong><br />
+  Paste images as short <code>@/tmp/.cc/...</code> paths in terminal, restore the original image in GUI apps.
+</p>
 
 <p align="center">
   <strong><a href="#english">English</a></strong> ·
@@ -6,8 +11,6 @@
 </p>
 
 ---
-
-Lightweight, context-aware clipboard enhancement for macOS terminal workflows.
 
 <a id="english"></a>
 ## English
