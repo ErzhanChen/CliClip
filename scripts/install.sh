@@ -102,7 +102,7 @@ print_success() {
     echo "$APP_NAME installed successfully."
     echo "------------------------------------------------"
     echo "Features:"
-    echo " - Image -> @Path when the frontmost app is iTerm2 or Terminal"
+    echo " - Image -> Path when the frontmost app is iTerm2 or Terminal"
     echo " - Original image restored automatically in GUI apps"
     echo " - No extra dependencies required"
     echo

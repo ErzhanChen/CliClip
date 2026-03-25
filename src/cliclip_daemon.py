@@ -185,7 +185,7 @@ def set_path_clipboard():
     if not latest_image_path or not os.path.exists(latest_image_path):
         return False
     try:
-        subprocess.run(['pbcopy'], input=f"@{latest_image_path}", text=True, stderr=subprocess.DEVNULL, check=False)
+        subprocess.run(['pbcopy'], input=latest_image_path, text=True, stderr=subprocess.DEVNULL, check=False)
         return True
     except:
         return False
